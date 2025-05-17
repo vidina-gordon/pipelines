@@ -61,5 +61,9 @@ RUN if [ -n "$PIPELINES_URLS" ] || [ -n "$PIPELINES_REQUIREMENTS_PATH" ]; then \
 ENV HOST="0.0.0.0"
 ENV PORT="9099"
 
+RUN apt-get update && apt-get install -y python3-pip && \
+    pip3 install --upgrade pip uv uvicorn watchdog && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # if we already installed the requirements on build, we can skip this step on run
 ENTRYPOINT [ "bash", "start.sh" ]
