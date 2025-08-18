@@ -169,17 +169,31 @@ class Pipeline:
 
                 processed_messages.append({"role": message["role"], "content": processed_content})
 
-            payload = {"modelId": model_id,
-                       "messages": processed_messages,
-                       "system": [{'text': system_message["content"] if system_message else 'you are an intelligent ai assistant'}],
-                       "inferenceConfig": {
-                           "temperature": body.get("temperature", 0.5),
-                           "topP": body.get("top_p", 0.9),
-                           "maxTokens": body.get("max_tokens", 4096),
-                           "stopSequences": body.get("stop", []),
-                        },
-                        "additionalModelRequestFields": {"top_k": body.get("top_k", 200)}
-                       }
+            payload = {
+                "modelId": model_id,
+                "messages": processed_messages,
+                "system": [{'text': system_message["content"] if system_message else 'you are an intelligent ai assistant'}],
+                "inferenceConfig": {
+                    "temperature": body.get("temperature", 0.5),
+                    "maxTokens": body.get("max_tokens", 4096),
+                    "stopSequences": body.get("stop", []),
+                },
+                "additionalModelRequestFields": {}
+            }
+            
+            # Handle top_p and temperature conflict
+            if "top_p" in body:
+                payload["inferenceConfig"]["topP"] = body["top_p"]
+                # Remove temperature if top_p is explicitly set
+                if "temperature" in payload["inferenceConfig"]:
+                    del payload["inferenceConfig"]["temperature"]
+                    
+            # Add top_k if explicitly provided
+            if "top_k" in body:
+                payload["additionalModelRequestFields"]["top_k"] = body["top_k"]
+            else:
+                # Use default top_k value
+                payload["additionalModelRequestFields"]["top_k"] = 200
 
             if body.get("stream", False):
                 supports_thinking = any(model in model_id for model in self.get_thinking_supported_models())
