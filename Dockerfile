@@ -51,6 +51,18 @@ ENV PIPELINES_URLS=${PIPELINES_URLS} \
 # Copy the application code
 COPY . .
 
+# Fix write permissions for OpenShift / non-root users
+RUN set -eux; \
+    for d in /app /root /.local /.cache; do \
+        mkdir -p "$d"; \
+    done; \
+    chgrp -R 0 /app /root /.local /.cache || true; \
+    chmod -R g+rwX /app /root /.local /.cache || true; \
+    find /app -type d -exec chmod g+s {} + || true; \
+    find /root -type d -exec chmod g+s {} + || true; \
+    find /.local -type d -exec chmod g+s {} + || true; \
+    find /.cache -type d -exec chmod g+s {} + || true
+
 # Run a docker command if either PIPELINES_URLS or PIPELINES_REQUIREMENTS_PATH is not empty
 RUN if [ -n "$PIPELINES_URLS" ] || [ -n "$PIPELINES_REQUIREMENTS_PATH" ]; then \
     echo "Running docker command with PIPELINES_URLS or PIPELINES_REQUIREMENTS_PATH"; \
