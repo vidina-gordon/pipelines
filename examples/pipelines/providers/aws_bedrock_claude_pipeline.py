@@ -52,14 +52,6 @@ class Pipeline:
 
         self.valves = self.Valves(
             **{
-                "AWS_ACCESS_KEY": os.getenv("AWS_ACCESS_KEY", "your-aws-access-key-here"),
-                "AWS_SECRET_KEY": os.getenv("AWS_SECRET_KEY", "your-aws-secret-key-here"),
-                "AWS_REGION_NAME": os.getenv("AWS_REGION_NAME", "your-aws-region-name-here"),
-            }
-        )
-
-        self.valves = self.Valves(
-            **{
                 "AWS_ACCESS_KEY": os.getenv("AWS_ACCESS_KEY", ""),
                 "AWS_SECRET_KEY": os.getenv("AWS_SECRET_KEY", ""),
                 "AWS_REGION_NAME": os.getenv(
@@ -72,6 +64,13 @@ class Pipeline:
 
         self.update_pipelines()
 
+    def get_thinking_supported_models(self):
+        """Returns list of model identifiers that support extended thinking"""
+        return [
+            "claude-3-7",
+            "claude-sonnet-4",
+            "claude-opus-4"
+        ]
 
     async def on_startup(self):
         # This function is called when the server is started.
@@ -170,26 +169,41 @@ class Pipeline:
 
                 processed_messages.append({"role": message["role"], "content": processed_content})
 
-            payload = {"modelId": model_id,
-                       "messages": processed_messages,
-                       "system": [{'text': system_message["content"] if system_message else 'you are an intelligent ai assistant'}],
-                       "inferenceConfig": {
-                           "temperature": body.get("temperature", 0.5),
-                           "topP": body.get("top_p", 0.9),
-                           "maxTokens": body.get("max_tokens", 4096),
-                           "stopSequences": body.get("stop", []),
-                        },
-                        "additionalModelRequestFields": {"top_k": body.get("top_k", 200)}
-                       }
+            payload = {
+                "modelId": model_id,
+                "messages": processed_messages,
+                "system": [{'text': system_message["content"] if system_message else 'you are an intelligent ai assistant'}],
+                "inferenceConfig": {
+                    "temperature": body.get("temperature", 0.5),
+                    "maxTokens": body.get("max_tokens", 4096),
+                    "stopSequences": body.get("stop", []),
+                },
+                "additionalModelRequestFields": {}
+            }
+            
+            # Handle top_p and temperature conflict
+            if "top_p" in body:
+                payload["inferenceConfig"]["topP"] = body["top_p"]
+                # Remove temperature if top_p is explicitly set
+                if "temperature" in payload["inferenceConfig"]:
+                    del payload["inferenceConfig"]["temperature"]
+                    
+            # Add top_k if explicitly provided
+            if "top_k" in body:
+                payload["additionalModelRequestFields"]["top_k"] = body["top_k"]
+            else:
+                # Use default top_k value
+                payload["additionalModelRequestFields"]["top_k"] = 200
 
             if body.get("stream", False):
-                supports_thinking = "claude-3-7" in model_id
+                supports_thinking = any(model in model_id for model in self.get_thinking_supported_models())
                 reasoning_effort = body.get("reasoning_effort", "none")
                 budget_tokens = REASONING_EFFORT_BUDGET_TOKEN_MAP.get(reasoning_effort)
 
                 # Allow users to input an integer value representing budget tokens
                 if (
                     not budget_tokens
+                    and reasoning_effort is not None
                     and reasoning_effort not in REASONING_EFFORT_BUDGET_TOKEN_MAP.keys()
                 ):
                     try:

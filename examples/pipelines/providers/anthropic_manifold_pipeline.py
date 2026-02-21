@@ -64,6 +64,17 @@ class Pipeline:
             {"id": "claude-3-5-haiku-20241022", "name": "claude-3.5-haiku"},
             {"id": "claude-3-5-sonnet-20241022", "name": "claude-3.5-sonnet"},
             {"id": "claude-3-7-sonnet-20250219", "name": "claude-3.7-sonnet"},
+            {"id": "claude-opus-4-20250514", "name": "claude-4-opus"},
+            {"id": "claude-sonnet-4-20250514", "name": "claude-4-sonnet"},
+            {"id": "claude-opus-4-1-20250805", "name": "claude-4.1-opus"},
+        ]
+
+    def get_thinking_supported_models(self):
+        """Returns list of model identifiers that support extended thinking"""
+        return [
+            "claude-3-7",
+            "claude-sonnet-4",
+            "claude-opus-4"
         ]
 
     async def on_startup(self):
@@ -158,15 +169,24 @@ class Pipeline:
                 "messages": processed_messages,
                 "max_tokens": body.get("max_tokens", 4096),
                 "temperature": body.get("temperature", 0.8),
-                "top_k": body.get("top_k", 40),
-                "top_p": body.get("top_p", 0.9),
                 "stop_sequences": body.get("stop", []),
                 **({"system": str(system_message)} if system_message else {}),
                 "stream": body.get("stream", False),
             }
+            
+            # Add optional parameters only if explicitly provided
+            if "top_k" in body:
+                payload["top_k"] = body["top_k"]
+            
+            # Only include top_p if explicitly set (not both temperature and top_p)
+            if "top_p" in body:
+                payload["top_p"] = body["top_p"]
+                # Remove temperature if top_p is explicitly set
+                if "temperature" in payload:
+                    del payload["temperature"]
 
             if body.get("stream", False):
-                supports_thinking = "claude-3-7" in model_id
+                supports_thinking = any(model in model_id for model in self.get_thinking_supported_models())
                 reasoning_effort = body.get("reasoning_effort", "none")
                 budget_tokens = REASONING_EFFORT_BUDGET_TOKEN_MAP.get(reasoning_effort)
 
